@@ -95,7 +95,6 @@ function init() {
   map = new Map(10, 10, 64, 32, 1, 1, 0)
   map.grid = false
   fillMap()
-  console.table(map.layers[0])
   convertMap()
   texture = new Texture('img/grass_and_water.png', 'grass_and_water.png', 64, 64, 0, 64, 32, 32, 1)
   texture.load(() => showMap(c))
