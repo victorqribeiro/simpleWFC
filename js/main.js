@@ -27,50 +27,65 @@ const rules = {
   "24":{"1":[9,10,13,17,23,24],"2":[10,11,14,18,23,24],"3":[11,12,15,19,23,24],"4":[9,12,16,20,23,24]}
 }
 
-function getTiles(x, y) {
-  let tiles = Object.keys(rules).map(v => parseInt(v))
-  if (x - 1 > -1 && map.layers[0][y][x - 1])
-    tiles = tiles.filter(t => rules[map.layers[0][y][x - 1]][2].includes(t))
-  if (x + 1 < map.intW && map.layers[0][y][x + 1])
-    tiles = tiles.filter(t => rules[map.layers[0][y][x + 1]][4].includes(t))
-  if (y - 1 > -1 && map.layers[0][y - 1][x])
-    tiles = tiles.filter(t => rules[map.layers[0][y - 1][x]][3].includes(t))
-  if (y + 1 < map.intH && map.layers[0][y + 1][x])
-    tiles = tiles.filter(t => rules[map.layers[0][y + 1][x]][1].includes(t))
-  return tiles
+const directions = [[0, -1, 1], [1, 0, 2], [0, 1, 3], [-1, 0, 4]]
+
+function propagate(options, stack) {
+  while (stack.length) {
+    const [y, x] = stack.pop()
+    for (const [dx, dy, dir] of directions) {
+      const nx = x + dx
+      const ny = y + dy
+      if (nx < 0 || ny < 0 || nx >= map.intW || ny >= map.intH)
+        continue
+      const allowed = new Set(options[y][x].flatMap(t => rules[t][dir]))
+      const remaining = options[ny][nx].filter(t => allowed.has(t))
+      if (!remaining.length)
+        return false
+      if (remaining.length < options[ny][nx].length) {
+        options[ny][nx] = remaining
+        stack.push([ny, nx])
+      }
+    }
+  }
+  return true
 }
 
-function getTileLowEntropy(openPos) {
+function getLowestEntropy(options) {
   let lowEntropy = Infinity
   let smallest = null
-  for(let i = 0; i < openPos.length; i++) {
-    const [y, x] = openPos[i]
-    const tiles = getTiles(x, y)
-    if (tiles.length < lowEntropy) {
-      lowEntropy = tiles.length
-      smallest = i
+  for (let i = 0; i < map.intH; i++) {
+    for (let j = 0; j < map.intW; j++) {
+      if (options[i][j].length > 1 && options[i][j].length < lowEntropy) {
+        lowEntropy = options[i][j].length
+        smallest = [i, j]
+      }
     }
   }
   return smallest
 }
 
-function fillMap() {
-  const openPos = []
-  openPos.push([Math.floor(Math.random() * map.intH), Math.floor(Math.random() * map.intW)])
-  while (openPos.length) {
-    const low = getTileLowEntropy(openPos)
-    const [posY, posX] = openPos.splice(low, 1)[0]
-    const tiles = getTiles(posX, posY)
-    map.layers[0][posY][posX] = tiles[Math.floor(Math.random() * tiles.length)]
-    if (posX - 1 >= 0 && !map.layers[0][posY][posX - 1])
-      openPos.push([posY, posX - 1])
-    if (posX + 1 < map.intW && !map.layers[0][posY][posX + 1])
-      openPos.push([posY, posX + 1])
-    if (posY - 1 >= 0 && !map.layers[0][posY - 1][posX])
-      openPos.push([posY - 1, posX])
-    if (posY + 1 < map.intH && !map.layers[0][posY + 1][posX])
-      openPos.push([posY + 1, posX])
+function tryFillMap() {
+  const tiles = Object.keys(rules).map(v => parseInt(v))
+  const options = Array(map.intH).fill().map(_ => Array(map.intW).fill(tiles))
+  let pos
+  while ((pos = getLowestEntropy(options))) {
+    const [posY, posX] = pos
+    const choices = options[posY][posX]
+    options[posY][posX] = [choices[Math.floor(Math.random() * choices.length)]]
+    if (!propagate(options, [pos]))
+      return false
   }
+  for (let i = 0; i < map.intH; i++)
+    for (let j = 0; j < map.intW; j++)
+      map.layers[0][i][j] = options[i][j][0]
+  return true
+}
+
+function fillMap(maxAttempts = 100) {
+  for (let i = 0; i < maxAttempts; i++)
+    if (tryFillMap())
+      return
+  throw new Error(`Could not fill the map after ${maxAttempts} attempts, check the rules`)
 }
 
 function showMap() {
